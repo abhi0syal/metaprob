@@ -90,7 +90,7 @@
           ;; Rejection sampling is very slow - 20 seconds per
           (print "---- Rejection ----\n")
           (ginf/gaussian-histogram
-           "samples from the gaussian demo target"   
+           "samples from the gaussian demo target"
            (instrument ginf/rejection-assay gaussian-number-of-samples)))
 
         (when (get dict :importance)

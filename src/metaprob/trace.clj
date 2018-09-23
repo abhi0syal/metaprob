@@ -126,7 +126,7 @@
 ;;    generative / inference
 ;; The compiled+generative variety has two representations:
 ;;   1. as a clojure 'function' (these are *not* traces), or
-;;   2. as a clojure function associated with a trace (these *are* treated 
+;;   2. as a clojure function associated with a trace (these *are* treated
 ;;      as traces).
 ;; The other three kinds have only representation #2.
 
@@ -199,7 +199,7 @@
         (recur (trace-direct-subtrace tr (first adr))
                (rest adr))))
     (trace-direct-subtrace tr adr)))
-    
+
 (defn trace-has?                        ;Does it have a value?
   ([tr] (trace-has-value? tr))
   ([tr adr]
@@ -493,7 +493,7 @@
 (defn trace-merge!-maybe [mutable tr]
   (if (mutable-trace? mutable)
     (do (trace-swap! mutable
-                     (fn [s1] 
+                     (fn [s1]
                        (trace-merge s1 tr trace-merge!-maybe)))
         mutable)
     (trace-merge mutable tr trace-merge!-maybe)))
@@ -570,7 +570,7 @@
   {:subtrace tr})
 
 (defn trace [& key-value-pairs]
-  (state/map-to-state
+   (state/map-to-state
    (kv-pairs-to-map key-value-pairs)))
 
 (def immutable-trace trace)    ;for completeness
