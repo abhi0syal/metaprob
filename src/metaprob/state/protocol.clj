@@ -16,7 +16,8 @@
   (subtrace [state key])
   (state-keys [state])
   (subtrace-count [state])
-  (state-to-map [state]))
+  (state-to-map [state])
+  (value-only-trace? [tr]))
 
 (extend-protocol IState
   ISeq
@@ -40,6 +41,8 @@
     (if (empty? state)
       {}
       {:value (first state) rest-marker (rest state)}))
+  (value-only-trace? [tr]
+    false)
 
   IPersistentVector
   (has-value? [state]
@@ -63,6 +66,8 @@
     (into {} (map (fn [i x] [i {:value x}])
                   (range (count state))
                   state)))
+  (value-only-trace? [tr]
+    false)
 
   IPersistentMap
   (has-value? [state]
@@ -85,7 +90,9 @@
         n
         (- n 1))))
   (state-to-map [state]
-    state))
+    state)
+  (value-only-trace? [tr]
+    (= (set (keys tr)) #{:value})))
 
 (defn state?
   [x]

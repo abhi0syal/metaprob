@@ -65,3 +65,5 @@
                       state))
 
         true (assert false ["not a state" state])))
+
+(def value-only-trace? core/value-only-trace?)
