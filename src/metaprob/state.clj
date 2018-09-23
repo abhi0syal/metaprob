@@ -5,13 +5,7 @@
             [metaprob.state.cond]
             [metaprob.state.protocol]))
 
-(declare map-to-state state-to-map keys-sans-value)
-
-;; The `steady?` flag controls a choice between a simple but slower
-;; implementation and an obscure but faster implementation of the
-;; primitives.
-
-(def steady? false)
+(declare map-to-state)
 
 (def rest-marker "rest")
 
