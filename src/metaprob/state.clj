@@ -7,8 +7,6 @@
 
 (declare map-to-state)
 
-(def rest-marker "rest")
-
 ;; Basic trace operations
 
 (potemkin/import-vars [metaprob.state.protocol
@@ -46,9 +44,9 @@
        (= (count tr) 1)
        (contains? tr :value)))
 
-;; Convert hash-map to heterogeneous canonical clojure form
-
-(defn map-to-state [m]
+(defn map-to-state
+  "Convert hash-map to heterogeneous canonical clojure form."
+  [m]
   (let [n (count m)]
     (cond (and (= n 2)
                (not (= (get m :value :no-value) :no-value))

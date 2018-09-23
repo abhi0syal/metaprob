@@ -1,8 +1,7 @@
-(ns metaprob.state.cond)
+(ns metaprob.state.cond
+  (:require [metaprob.state.core :as core]))
 
-(declare state-to-map keys-sans-value)
-
-(def rest-marker "rest")
+(declare state-to-map)
 
 (defn has-value? [state]
     (cond (seq? state) (not (empty? state))
@@ -21,7 +20,7 @@
 
 (defn has-subtrace? [state key]
     (cond (seq? state) (and (not (empty? state))
-                            (= key rest-marker))
+                          (= key core/rest-marker))
           (vector? state) (and (integer? key)
                                (>= key 0)
                                (< key (count state)))
@@ -38,16 +37,10 @@
     val))
 
 (defn state-keys [state]
-    (cond (seq? state) (if (empty? state) '() (list rest-marker))
+  (cond (seq? state) (if (empty? state) '() (list core/rest-marker))
           (vector? state) (range (count state))
-          (map? state) (keys-sans-value state)
+        (map? state) (core/keys-sans-value state)
         true (assert false ["not a state" state])))
-
-(defn ^:private keys-sans-value [m]   ;aux for above
-  (let [ks (remove #{:value} (keys m))]
-    (if (= ks nil)
-      '()
-      ks)))
 
 (defn subtrace-count [state]
     (cond (seq? state) (if (empty? state) 0 1)
@@ -64,7 +57,7 @@
         (seq? state)
         (if (empty? state)
           {}
-          {:value (first state) rest-marker (rest state)})
+          {:value (first state) core/rest-marker (rest state)})
 
         (vector? state)
         (into {} (map (fn [i x] [i {:value x}])

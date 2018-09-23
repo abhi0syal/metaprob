@@ -1,8 +1,7 @@
-(ns metaprob.state.steady)
+(ns metaprob.state.steady
+  (:require [metaprob.state.core :as core]))
 
-(declare state-to-map keys-sans-value)
-
-(def rest-marker "rest")
+(declare state-to-map)
 
 (defn has-value? [state]
   (not (= (get (state-to-map state) :value :no-value) :no-value)))
@@ -20,13 +19,7 @@
     val))
 
 (defn state-keys [state]
-  (keys-sans-value (state-to-map state)))
-
-(defn ^:private keys-sans-value [m]   ;aux for above
-  (let [ks (remove #{:value} (keys m))]
-    (if (= ks nil)
-      '()
-      ks)))
+  (core/keys-sans-value (state-to-map state)))
 
 (defn subtrace-count [state]
   (count (state-keys state)))
@@ -37,7 +30,7 @@
         (seq? state)
         (if (empty? state)
           {}
-          {:value (first state) rest-marker (rest state)})
+          {:value (first state) core/rest-marker (rest state)})
 
         (vector? state)
         (into {} (map (fn [i x] [i {:value x}])
