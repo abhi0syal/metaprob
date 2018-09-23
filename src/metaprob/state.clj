@@ -10,11 +10,10 @@
 
 ;; Basic trace operations
 (potemkin/import-vars [metaprob.state.core
-                       rest-marker
-                       map-to-state])
+                       map-to-state
+                       rest-marker])
 
 (potemkin/import-vars [metaprob.state.protocol
-                       state?
                        has-value?
                        value
                        has-subtrace?
@@ -23,6 +22,13 @@
                        subtrace-count
                        state-to-map
                        value-only-trace?])
+
+(defn state?
+  [x]
+  ;; satisfies? is slow https://dev.clojure.org/jira/browse/CLJ-1814
+  (or (seq? x)
+      (vector? x)
+      (map? x)))
 
 ; Constructors
 

@@ -92,11 +92,5 @@
   (state-to-map [state]
     state)
   (value-only-trace? [tr]
-    (= (set (keys tr)) #{:value})))
-
-(defn state?
-  [x]
-  ;; satisfies? is slow https://dev.clojure.org/jira/browse/CLJ-1814
-  (or (seq? x)
-      (vector? x)
-      (map? x)))
+    (and (= 1 (count tr))
+         (contains? tr :value))))
