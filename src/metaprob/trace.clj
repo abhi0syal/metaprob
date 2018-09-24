@@ -1,5 +1,6 @@
 (ns metaprob.trace
-  (:require [metaprob.state :as state]))
+  (:require [metaprob.state :as state]
+            [metaprob.trace :as trace]))
 
 ;; There are three kinds of generic traces:
 ;;   1. trace-state (immutable)
@@ -80,7 +81,7 @@
         (trace-state (deref tr))
         (if (state/state? tr)
           tr
-          (assert false ["trace-state wta" tr]))))))
+          (throw (ex-info "trace-state wta" {:trace tr})))))))
 
 ;; Coerce trace to something we can update (an cell whose contents is
 ;; a state).
@@ -97,8 +98,7 @@
           (if (state/state? d)
             tr                          ;Success - cell containing a state
             (trace-cell d)))
-        (assert false
-                ["expected a mutable trace" tr])))))
+        (throw (ex-info "expected a mutable trace" {:trace tr}))))))
 
 ;; Fetch and store the state of an cell.
 ;; Need to deal with locatives; a bit of a kludge.
@@ -126,7 +126,7 @@
 ;;    generative / inference
 ;; The compiled+generative variety has two representations:
 ;;   1. as a clojure 'function' (these are *not* traces), or
-;;   2. as a clojure function associated with a trace (these *are* treated 
+;;   2. as a clojure function associated with a trace (these *are* treated
 ;;      as traces).
 ;; The other three kinds have only representation #2.
 
@@ -199,7 +199,7 @@
         (recur (trace-direct-subtrace tr (first adr))
                (rest adr))))
     (trace-direct-subtrace tr adr)))
-    
+
 (defn trace-has?                        ;Does it have a value?
   ([tr] (trace-has-value? tr))
   ([tr adr]
@@ -493,7 +493,7 @@
 (defn trace-merge!-maybe [mutable tr]
   (if (mutable-trace? mutable)
     (do (trace-swap! mutable
-                     (fn [s1] 
+                     (fn [s1]
                        (trace-merge s1 tr trace-merge!-maybe)))
         mutable)
     (trace-merge mutable tr trace-merge!-maybe)))
@@ -775,4 +775,3 @@
    (pprint-indented x "" out)
    (metaprob-newline out)
    (.flush out)))
-

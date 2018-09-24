@@ -26,7 +26,7 @@
     (cond (seq? state) (not (empty? state))
           (vector? state) false
           (map? state) (not (= (get state :value :no-value) :no-value))
-          true (assert false ["not a state" state]))))
+          :else (throw (ex-info "not a state" {:state state})))))
 
 (defn value [state]
   (if steady?
@@ -35,10 +35,10 @@
     (cond (seq? state) (first state)
           (vector? state) (assert false "no value")
           (map? state)
-          (let [value (get state :value :no-value)]
-            (assert (not (= value :no-value)) ["state has no value" state])
-            value)
-          true (assert false ["not a state" state]))))
+          (if-not (has-value? state)
+            (throw (ex-info "state has no value" state))
+            (get state :value))
+          :else (throw (ex-info "not a state" {:state state})))))
 
 (defn has-subtrace? [state key]
   (if steady?
@@ -49,18 +49,17 @@
                                (>= key 0)
                                (< key (count state)))
           (map? state) (contains? state key)
-          true (assert false ["not a state" state]))))
+          :else (throw (ex-info "not a state" {:state state})))))
 
 (defn subtrace [state key]
-  (let [val (if steady?
-              (get (state-to-map state) key)
-              (cond (seq? state) (rest state)
-                    (vector? state) {:value (nth state key)}
-                    (map? state) (get state key)
-                    true (assert false ["not a state" state])))]
-    (assert (not (= val nil))
-            ["no such subtrace" key state])
-    val))
+  (if-let [val (if steady?
+                 (get (state-to-map state) key)
+                 (cond (seq? state) (rest state)
+                       (vector? state) {:value (nth state key)}
+                       (map? state) (get state key)
+                       :else (throw (ex-info "not a state" {:state state}))))]
+    val
+    (throw (ex-info "no such subtrace" {:state state :key key}))))
 
 (defn state-keys [state]
   (if steady?
@@ -68,7 +67,7 @@
     (cond (seq? state) (if (empty? state) '() (list rest-marker))
           (vector? state) (range (count state))
           (map? state) (keys-sans-value state)
-          true (assert false ["not a state" state]))))
+          :else (throw (ex-info "not a state" {:state state})))))
 
 (defn ^:private keys-sans-value [m]   ;aux for above
   (let [ks (remove #{:value} (keys m))]
@@ -85,7 +84,7 @@
                          (if (= (get state :value :no-value) :no-value)
                            n
                            (- n 1)))
-          true (assert false ["not a state" state]))))
+          :else (throw (ex-info "not a state" {:state state})))))
 
 ;; Constructors
 
@@ -100,8 +99,8 @@
 
 (defn set-subtrace [state key sub]
   ;; sub is a trace but not necessarily a sub
-  ;(if (= sub '())
-  ;  state
+                                        ;(if (= sub '())
+                                        ;  state
   (map-to-state (assoc (state-to-map state) key sub)))
 
 (defn clear-subtrace [state key]
@@ -124,8 +123,7 @@
                       (range (count state))
                       state))
 
-        true (assert false ["not a state" state])
-        ))
+        :else (throw (ex-info "not a state" {:state state}))))
 
 (defn value-only-trace? [tr]
   (and (map? tr)
@@ -147,6 +145,7 @@
           (every? (fn [n] (value-only-trace? (get m n :no-value))) (range n))
           (vec (for [i (range n)] (get (get m i) :value)))
 
-          true (do (assert (map? m) ["expected a map" m])
-                   (doseq [entry m] true)    ;Don't be lazy!
-                   m))))
+          :else (if-not (map? m)
+                  (throw (ex-info "expected a map" {:value m}))
+                  (do (doseq [entry m] true)    ;Don't be lazy!
+                      m)))))
