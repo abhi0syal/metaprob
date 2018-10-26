@@ -2,10 +2,12 @@
 ;; To be used in conjunction with the syntax module.
 
 (ns metaprob.builtin-impl
-  (:require [metaprob.trace :refer :all])
-  (:require [metaprob.sequence :refer :all])
-  (:require [clojure.java.io :as io])
-  (:require [clojure.set :as set]))
+  #?(:clj (:import [java.lang Math]
+                   [java.util Random]))
+  (:require #?(:clj [clojure.java.io :as io])
+            [clojure.set :as set]
+            [metaprob.trace :as trace]
+            [metaprob.sequence :as sequence]))
 
 ;; -----------------------------------------------------------------------------
 ;; Addresses
@@ -18,9 +20,9 @@
   (if (= keys nil)
     '()
     (map (fn [key]
-           (if (procedure? key)
+           (if (trace/procedure? key)
              (procedure-name key)
-             (do (assert (ok-key? key))
+             (do (assert (trace/ok-key? key))
                  key)))
          keys)))
 
@@ -34,14 +36,14 @@
                   (mapcat (fn [key]
                             (map (fn [site]
                                    (cons key site))
-                                 (get-sites (trace-subtrace tr key))))
-                          (trace-keys tr))]
-              (if (trace-has? tr)
+                                 (get-sites (trace/trace-subtrace tr key))))
+                          (trace/trace-keys tr))]
+              (if (trace/trace-has? tr)
                 (cons '() site-list)
                 site-list)))]
     (let [s (get-sites tr)]
       (doseq [site s]
-        (assert (trace-has? tr site) ["missing value at" site]))
+        (assert (trace/trace-has? tr site) ["missing value at" site]))
       s)))
 
 ;; -----------------------------------------------------------------------------
@@ -56,11 +58,11 @@
 ;; Invoke a "foreign" procedure.  Called from interpreter.
 
 (defn generate-foreign [ifn inputs]
-  (assert (proper-function? ifn) ["not a foreign-procedure" ifn inputs])
-  (apply ifn (sequence-to-seq inputs)))
+  (assert (trace/proper-function? ifn) ["not a foreign-procedure" ifn inputs])
+  (apply ifn (sequence/sequence-to-seq inputs)))
 
 (defn make-foreign-procedure [name ifn]
-  (assert (proper-function? ifn) ["not procedure" name ifn])
+  (assert (trace/proper-function? ifn) ["not procedure" name ifn])
   ifn)
 
 ;; -----------------------------------------------------------------------------
@@ -70,8 +72,8 @@
 ;; DEPRECATED, DO NOT USE.
 
 (defn ^:private freeze [x]
-  (if (trace? x)
-    (let [x (trace-state x)]
+  (if (trace/trace? x)
+    (let [x (trace/trace-state x)]
       (cond (seq? x)
             (map freeze x)
 
@@ -79,10 +81,10 @@
             (vec (map freeze (seq x)))
 
             true
-            (let [keys (trace-keys x)
-                  result (into {} (for [key keys] [key (freeze (trace-subtrace x key))]))]
-              (if (trace-has? x)
-                (assoc result :value (freeze (trace-get x)))
+            (let [keys (trace/trace-keys x)
+                  result (into {} (for [key keys] [key (freeze (trace/trace-subtrace x key))]))]
+              (if (trace/trace-has? x)
+                (assoc result :value (freeze (trace/trace-get x)))
                 result))))
     x))
 
@@ -93,7 +95,7 @@
 (defn trace-name
   ([proc-parse-tree]
    (str (hash (freeze proc-parse-tree))))
-  ([proc-parse-tree name] 
+  ([proc-parse-tree name]
    (if name
      (str name "-" (trace-name proc-parse-tree))
      (trace-name proc-parse-tree))))
@@ -104,20 +106,20 @@
 ;; Mainly for foreign procedures.
 
 (defn procedure-name [pp]
-  (if (trace? pp)
-    (if (trace-has? pp "name")
-      (trace-get pp "name")          ;Cached
+  (if (trace/trace? pp)
+    (if (trace/trace-has? pp "name")
+      (trace/trace-get pp "name")          ;Cached
       (str "?-" (trace-name pp)))    ;???
     (foreign-procedure-name pp)))    ;E.g. "clojure.core$str@1593f8c5"
 
-;; prelude has: trace_of lookup_chain lookup_chain_with_exactly 
+;; prelude has: trace_of lookup_chain lookup_chain_with_exactly
 
 ;; What about sp = tracing_proposer_to_prob_prog in prelude (!!) - do
 ;; we need it, how to define, etc.?
 
 ;; original prelude has: proposer_of factor apply_with_address
 
-;; prelude has: trace_of lookup_chain lookup_chain_with_exactly 
+;; prelude has: trace_of lookup_chain lookup_chain_with_exactly
 
 ;; The assert macro in clojure is much nicer, since (1) it can catch
 ;; exceptions in the evaluation of its subforms, (2) it can show you
@@ -125,11 +127,12 @@
 ;; 2nd argument unless the condition fails.
 
 (defn metaprob-assert [condition complaint & irritants]
-  (binding [*out* *err*]
+  (binding #?(:clj [*out* *err*]
+              :cljs [*print-fn* *print-err-fn*])
     (doseq [irritant irritants]
-      (if (mutable-trace? irritant)
+      (if (trace/mutable-trace? irritant)
         (do (print "Irritant:")
-            (metaprob-pprint irritant)))))
+            (trace/metaprob-pprint irritant)))))
   (assert condition
           (if (empty? irritants)
             complaint
@@ -147,37 +150,45 @@
   (let [ns (if (symbol? ns)
              (find-ns ns)
              ns)]
-    (assert (top-level-environment? ns))
+    (assert (trace/top-level-environment? ns))
     ns))
 
 ;; TBD: extend this to allow namespace-prefixed variable references foo/bar
 
-(defn top-level-lookup [the-ns name]
-  (assert (string? name) ["wanted a string" the-ns name])
-  (assert (top-level-environment? the-ns) ["wanted a top-level env" the-ns name])
-  (let [v (ns-resolve the-ns (symbol name))]
-    (assert (var? v) ["no such variable" the-ns name])
-    (assert (not (get (meta v) :macro)) ["reference to macro" the-ns name])
-    (assert (bound? v) ["unbound variable" the-ns name])
-    (deref v)))
+#?(:clj (defn top-level-lookup [the-ns name]
+          (assert (string? name) ["wanted a string" the-ns name])
+          (assert (trace/top-level-environment? the-ns) ["wanted a top-level env" the-ns name])
+          (let [v (ns-resolve the-ns (symbol name))]
+            (assert (var? v) ["no such variable" the-ns name])
+            (assert (not (get (meta v) :macro)) ["reference to macro" the-ns name])
+            (assert (bound? v) ["unbound variable" the-ns name])
+            (deref v))))
 
-(defn top-level-bind! [the-ns name value]
-  ;; how to create a new binding in a namespace (a la def)???
-  (let [sym (symbol name)
-        r (ns-resolve the-ns sym)
-        r (if r r (binding [*ns* the-ns]
-                    (print (format "Assigning %s in %s" sym the-ns))
-                    (eval `(def ~sym))
-                    (ns-resolve the-ns sym)))]
-    (ref-set r value)
-    nil))
+#?(:clj (defn top-level-bind! [the-ns name value]
+          ;; how to create a new binding in a namespace (a la def)???
+          (let [sym (symbol name)
+                r (ns-resolve the-ns sym)
+                r (if r r (binding [*ns* the-ns]
+                            (print "Assigning" sym "in" the-ns)
+                            (eval `(def ~sym))
+                            (ns-resolve the-ns sym)))]
+            (ref-set r value)
+            nil)))
 
 ;; ----------------------------------------------------------------------------
 ;; Mathematical
 
-(defn exp [x] (java.lang.Math/exp x))
-(defn expt [x y] (java.lang.Math/pow x y))
-(defn sqrt [x] (java.lang.Math/sqrt x))
+(defn exp [x]
+  #?(:clj (Math/exp x)
+     :cljs (js/Math.exp x)))
+
+(defn expt [x y]
+  #?(:clj (Math/pow x y)
+     :cljs (js/Math.pow x y)))
+
+(defn sqrt [x]
+  #?(:clj (Math/sqrt x)
+     :cljs (js/Math.sqrt x)))
 
 (defn add
   ([x y]
@@ -187,66 +198,90 @@
        (str x y)
        (let [x (if (string? x) (list x) x)
              y (if (string? y) (list y) y)]
-         (if (and (trace? x) (trace? y))
-           (append x y)
+         (if (and (trace/trace? x) (trace/trace? y))
+           (sequence/append x y)
            (assert false ["not addable" x y]))))))
   ([] 0)
   ([x] x)
   ;; this is rather foolish
   ([x y z & w] (add (add x y) (apply add z w))))
 
-(defn log [x] (java.lang.Math/log x))
-(defn cos [x] (java.lang.Math/cos x))
-(defn sin [x] (java.lang.Math/sin x))
-(defn log1p [x] (java.lang.Math/log1p x))
-(defn floor [x] (java.lang.Math/floor x))
-(defn round [x] (java.lang.Math/round x))
+(defn log [x]
+  #?(:clj (Math/log x)
+     :cljs (js/Math.log x)))
 
-(def pi*2 (* 2 (java.lang.Math/acos -1)))
+(defn cos [x]
+  #?(:clj (Math/cos x)
+     :cljs (js/Math.cos)))
+
+(defn sin [x]
+  #?(:clj (Math/sin x)
+     :cljs (js/Math.sin x)))
+
+(defn log1p [x]
+  #?(:clj (Math/log1p x)
+     :cljs (js/Math.log1p x)))
+
+(defn floor [x]
+  #?(:clj (Math/floor x)
+     :cljs (js/Math.floor x)))
+
+(defn round [x]
+  #?(:clj (Math/round x)
+     :cljs (js/Math.round x)))
+
+(def pi*2 (* 2 #?(:clj (Math/acos -1)
+                  :cljs (js/Math.acos -1))))
 (defn normal [mu variance]              ;not needed any more?
   (fn [x]
     (let [x-mu (- x mu)]
       (/ (exp (- 0 (/ (* x-mu x-mu) (* 2.0 variance))))
          (sqrt (* pi*2 variance))))))
 
-(def ^:dynamic *rng* (java.util.Random. 42))
+#?(:clj (def ^:dynamic *rng*
+          (Random. 42)))
+
+(defn- next-random
+  []
+  #?(:clj (.nextDouble *rng*)
+     :cljs (js/Math.random)))
 
 (defn sample-uniform
-  ([] (.nextDouble *rng*))
-  ([a b] (+ a (* (.nextDouble *rng*) (- b a)))))
-  
+  ([] (next-random))
+  ([a b] (+ a (* (next-random) (- b a)))))
+
 
 ;; -----------------------------------------------------------------------------
 ;; Graphical output (via gnuplot or whatever)
 
-(defn binned-histogram [& {:keys [name samples overlay-densities
-                                  sample-lower-bound sample-upper-bound
-                                  number-of-intervals]}]
-  (let [samples (sequence-to-seq samples)
-        sample-lower-bound (or sample-lower-bound -5)
-        sample-upper-bound (or sample-upper-bound 5)
-        number-of-intervals (or number-of-intervals 20)
-        fname (clojure.string/replace name " " "_")
-        path (str "results/" fname ".samples")
-        commands-path (str path ".commands")]
-    (print (format "Writing commands to %s for histogram generation\n" commands-path))
-    ;;(print (format " overlay-densities = %s\n" (freeze overlay-densities)))
-    (with-open [writor (io/writer commands-path)]
-      (.write writor (format "reset\n"))
-      (.write writor (format "min=%s.\n" sample-lower-bound))
-      (.write writor (format "max=%s.\n" sample-upper-bound))
-      (.write writor (format "n=%s\n" number-of-intervals))
-      (.close writor))
-    (print (format "Writing samples to %s\n" path))
-    (with-open [writor (io/writer path)]
-      (doseq [sample samples]
-        (.write writor (str sample))
-        (.write writor "\n"))
-      (.close writor))))
+#?(:clj (defn binned-histogram [& {:keys [name samples overlay-densities
+                                          sample-lower-bound sample-upper-bound
+                                          number-of-intervals]}]
+          (let [samples (sequence/sequence-to-seq samples)
+                sample-lower-bound (or sample-lower-bound -5)
+                sample-upper-bound (or sample-upper-bound 5)
+                number-of-intervals (or number-of-intervals 20)
+                fname (clojure.string/replace name " " "_")
+                path (str "results/" fname ".samples")
+                commands-path (str path ".commands")]
+            (print (format "Writing commands to %s for histogram generation\n" commands-path))
+            ;;(print (format " overlay-densities = %s\n" (freeze overlay-densities)))
+            (with-open [writor (io/writer commands-path)]
+              (.write writor (format "reset\n"))
+              (.write writor (format "min=%s.\n" sample-lower-bound))
+              (.write writor (format "max=%s.\n" sample-upper-bound))
+              (.write writor (format "n=%s\n" number-of-intervals))
+              (.close writor))
+            (print (format "Writing samples to %s\n" path))
+            (with-open [writor (io/writer path)]
+              (doseq [sample samples]
+                (.write writor (str sample))
+                (.write writor "\n"))
+              (.close writor)))))
 
 ;; Maybe this should print (i.e. princ) instead of pr (i.e. prin1)?
 
-;!!
+;;!!
 (defn metaprob-print [x]
   (print x)
   (newline)
@@ -258,45 +293,45 @@
 ;; This could go in prelude.clj, with some effort.
 
 (defn inf [name model implementation]
-  (assert (procedure? implementation) implementation)
-  (trace-as-procedure (mutable-trace "name" (str "inf-" name)
-                                     "model" model
-                                     "implementation" implementation)
-                      ;; When called from Clojure:
-                      (fn [& inputs]
-                        (let [inputs (if (= inputs nil) (list) inputs)]
-                          (nth (implementation inputs (trace) (trace) false)
-                               0)))))
+  (assert (trace/procedure? implementation) implementation)
+  (trace/trace-as-procedure (trace/mutable-trace "name" (str "inf-" name)
+                                                 "model" model
+                                                 "implementation" implementation)
+                            ;; When called from Clojure:
+                            (fn [& inputs]
+                              (let [inputs (if (= inputs nil) (list) inputs)]
+                                (nth (implementation inputs (trace/trace) (trace/trace) false)
+                                     0)))))
 
 (defn clojure-interpreter [proc inputs
                            intervention-trace target-trace output-trace?]
-  (assert (foreign-procedure? proc))
-  (assert (empty-trace? intervention-trace))
-  (assert (empty-trace? target-trace))
+  (assert (trace/foreign-procedure? proc))
+  (assert (trace/empty-trace? intervention-trace))
+  (assert (trace/empty-trace? target-trace))
   (assert (not output-trace?))
-  [(clojure.core/apply proc inputs) (trace) 0])
+  [(clojure.core/apply proc inputs) (trace/trace) 0])
 
 (def ^:dynamic *ambient-interpreter* clojure-interpreter)
 
 (defn infer-apply [proc inputs intervention-trace
                    target-trace output-trace?]
-  (if (and (foreign-procedure? proc)
-           (empty-trace? intervention-trace)
-           (empty-trace? target-trace)
+  (if (and (trace/foreign-procedure? proc)
+           (trace/empty-trace? intervention-trace)
+           (trace/empty-trace? target-trace)
            (not output-trace?))
     ;; Bypass inference when there is no need to use it.
-    [(generate-foreign proc inputs) (trace) 0]
+    [(generate-foreign proc inputs) (trace/trace) 0]
 
     (let [[value output score]
           (*ambient-interpreter* proc inputs intervention-trace
                                  target-trace output-trace?)]
       (assert (number? score) ["bad score"
                                score proc
-                               (if (trace? *ambient-interpreter*)
-                                 (trace-state *ambient-interpreter*)
+                               (if (trace/trace? *ambient-interpreter*)
+                                 (trace/trace-state *ambient-interpreter*)
                                  *ambient-interpreter*)])
       (assert (if output-trace?
-                (trace? output)
+                (trace/trace? output)
                 true)
               ["bad output" output proc])
       [value output score])))
