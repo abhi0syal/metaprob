@@ -146,34 +146,37 @@
 ;; ----------------------------------------------------------------------------
 ;; Metaprob top level environments are represented as clojure namespaces.
 
-(defn make-top-level-env [ns]
-  (let [ns (if (symbol? ns)
-             (find-ns ns)
-             ns)]
-    (assert (trace/top-level-environment? ns))
-    ns))
+#?(:clj
+   (defn make-top-level-env [ns]
+     (let [ns (if (symbol? ns)
+                (find-ns ns)
+                ns)]
+       (assert (trace/top-level-environment? ns))
+       ns)))
 
 ;; TBD: extend this to allow namespace-prefixed variable references foo/bar
 
-#?(:clj (defn top-level-lookup [the-ns name]
-          (assert (string? name) ["wanted a string" the-ns name])
-          (assert (trace/top-level-environment? the-ns) ["wanted a top-level env" the-ns name])
-          (let [v (ns-resolve the-ns (symbol name))]
-            (assert (var? v) ["no such variable" the-ns name])
-            (assert (not (get (meta v) :macro)) ["reference to macro" the-ns name])
-            (assert (bound? v) ["unbound variable" the-ns name])
-            (deref v))))
+(defn top-level-lookup [the-ns name]
+  (assert (string? name) ["wanted a string" the-ns name])
+  (assert (trace/top-level-environment? the-ns) ["wanted a top-level env" the-ns name])
+  (let [v #?(:clj (ns-resolve the-ns (symbol name))
+             :cljs (ns-resolve (some-ns/analyzer-state)))]
+    (assert (var? v) ["no such variable" the-ns name])
+    (assert (not (get (meta v) :macro)) ["reference to macro" the-ns name])
+    (assert (bound? v) ["unbound variable" the-ns name])
+    (deref v)))
 
-#?(:clj (defn top-level-bind! [the-ns name value]
-          ;; how to create a new binding in a namespace (a la def)???
-          (let [sym (symbol name)
-                r (ns-resolve the-ns sym)
-                r (if r r (binding [*ns* the-ns]
-                            (print "Assigning" sym "in" the-ns)
-                            (eval `(def ~sym))
-                            (ns-resolve the-ns sym)))]
-            (ref-set r value)
-            nil)))
+#?(:clj
+   (defn top-level-bind! [the-ns name value]
+     ;; how to create a new binding in a namespace (a la def)???
+     (let [sym (symbol name)
+           r (ns-resolve the-ns sym)
+           r (if r r (binding [*ns* the-ns]
+                       (print "Assigning" sym "in" the-ns)
+                       (eval `(def ~sym))
+                       (ns-resolve the-ns sym)))]
+       (ref-set r value)
+       nil)))
 
 ;; ----------------------------------------------------------------------------
 ;; Mathematical
